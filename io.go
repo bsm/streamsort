@@ -82,25 +82,25 @@ func (r *reader) Err() error {
 // --------------------------------------------------------------------
 
 type writer struct {
-	w   io.Writer
+	out io.Writer
 	tmp [binary.MaxVarintLen64]byte
 }
 
 // Append appends data to the writer
 func (w *writer) Append(data []byte) error {
 	n := binary.PutVarint(w.tmp[:], int64(len(data)))
-	if _, err := w.w.Write(w.tmp[:n]); err != nil {
+	if _, err := w.out.Write(w.tmp[:n]); err != nil {
 		return err
 	}
-	if _, err := w.w.Write(data); err != nil {
+	if _, err := w.out.Write(data); err != nil {
 		return err
 	}
 	binary.LittleEndian.PutUint32(w.tmp[:4], crc32.ChecksumIEEE(data))
-	if _, err := w.w.Write(w.tmp[:4]); err != nil {
+	if _, err := w.out.Write(w.tmp[:4]); err != nil {
 		return err
 	}
 	return nil
 }
 
 // Reset resets the writer
-func (w *writer) Reset(wr io.Writer) { w.w = wr }
+func (w *writer) Reset(out io.Writer) { w.out = out }

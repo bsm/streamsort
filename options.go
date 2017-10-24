@@ -4,7 +4,6 @@ import "bytes"
 
 // TODO
 // * allow to limit the number of intermediate files using a generational sort approach
-// * allow to compress intermediate files
 
 // Options contains sorting options
 type Options struct {
@@ -13,8 +12,12 @@ type Options struct {
 	TempDir string
 
 	// Compararer defines the sort order.
-	// Default: uses bytes.Compare
+	// Default: bytes.Compare
 	Comparer Comparer
+
+	// Compression is used for intermediate files.
+	// Default: CompressionNone
+	Compression Compression
 
 	// MaxMemBuffer limits the memory used for sorting
 	// Default: 64M (must be at least 1M = 1024*1024)
@@ -28,6 +31,10 @@ func (o *Options) norm() {
 		o.Comparer = ComparerFunc(bytes.Compare)
 	}
 
+	if o.Compression < CompressionNone || o.Compression >= nCompression {
+		o.Compression = CompressionNone
+	}
+
 	if o.MaxMemBuffer < 1 {
 		o.MaxMemBuffer = 64 * oneMB
 	} else if o.MaxMemBuffer < oneMB {
@@ -36,6 +43,14 @@ func (o *Options) norm() {
 }
 
 // --------------------------------------------------------------------
+
+type Compression uint8
+
+const (
+	CompressionNone Compression = iota
+	CompressionGzip
+	nCompression
+)
 
 // Comparer is used to compare data chunks for ordering
 type Comparer interface {

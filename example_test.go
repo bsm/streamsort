@@ -67,10 +67,11 @@ func Example_JSON() {
 		return 0
 	})
 
-	// Init a new Sorter, use no more than 1M of memory
+	// Init a new Sorter, use compression and no more than 1M of memory
 	sorter := streamsort.New(&streamsort.Options{
 		MaxMemBuffer: 1024 * 1024,
 		Comparer:     comparer,
+		Compression:  streamsort.CompressionGzip,
 	})
 	defer sorter.Close()
 

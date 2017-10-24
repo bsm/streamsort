@@ -1,6 +1,7 @@
 package streamsort
 
 import (
+	"compress/gzip"
 	"errors"
 	"os"
 )
@@ -9,45 +10,41 @@ var errClosed = errors.New("streamsort: iterator is closed")
 
 // Iterator allows to iterate over sorted outputs
 type Iterator struct {
-	files    []*os.File
-	readers  []*reader
-	items    sortedSlice
-	comparer Comparer
+	files   []*os.File
+	zwraps  []*gzip.Reader
+	readers []*reader
+	items   sortedSlice
+
+	comparer    Comparer
+	compression Compression
 
 	cur []byte
 	err error
 }
 
-func newIterator(names []string, c Comparer) (*Iterator, error) {
-	iter := &Iterator{
-		files:    make([]*os.File, 0, len(names)),
-		readers:  make([]*reader, 0, len(names)),
-		items:    make(sortedSlice, 0, len(names)),
-		comparer: c,
-	}
+func (i *Iterator) append(orig int, data []byte) {
+	i.items = i.items.Insert(orig, data, i.comparer)
+}
 
-	for _, fname := range names {
-		f, err := os.Open(fname)
+func (i *Iterator) addFile(f *os.File) (*reader, int, error) {
+	o := len(i.readers)
+	i.files = append(i.files, f)
+
+	var r *reader
+	switch i.compression {
+	case CompressionGzip:
+		z, err := gzip.NewReader(f)
 		if err != nil {
-			_ = iter.Close()
-			return nil, err
+			return nil, 0, err
 		}
-
-		r := newReader(f)
-		o := len(iter.readers)
-		iter.files = append(iter.files, f)
-		iter.readers = append(iter.readers, r)
-
-		if r.Next() {
-			iter.items = iter.items.Insert(o, r.Bytes(), c)
-		}
-		if err := r.Err(); err != nil {
-			_ = iter.Close()
-			return nil, err
-		}
+		i.zwraps = append(i.zwraps, z)
+		r = newReader(z)
+	default:
+		r = newReader(f)
 	}
+	i.readers = append(i.readers, r)
 
-	return iter, nil
+	return r, o, nil
 }
 
 // Next advances the cursor to the next entry
@@ -65,11 +62,11 @@ func (i *Iterator) Next() bool {
 	i.items = i.items[:pos]
 	i.cur = append(i.cur[:0], item.data...)
 
-	reader := i.readers[item.orig]
-	if reader.Next() {
-		i.items = i.items.Insert(item.orig, reader.Bytes(), i.comparer)
+	src := i.readers[item.orig]
+	if src.Next() {
+		i.items = i.items.Insert(item.orig, src.Bytes(), i.comparer)
 	}
-	if err := reader.Err(); err != nil {
+	if err := src.Err(); err != nil {
 		i.err = err
 		return false
 	}

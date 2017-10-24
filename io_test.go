@@ -17,7 +17,8 @@ var _ = Describe("writer/reader", func() {
 		Expect(w.Append([]byte("foo"))).To(Succeed())
 		Expect(w.Append([]byte("bar"))).To(Succeed())
 		Expect(w.Append([]byte("baz"))).To(Succeed())
-		Expect(w.Append([]byte("dau"))).To(Succeed())
+		Expect(w.Append([]byte("boo"))).To(Succeed())
+		Expect(b.Len()).To(Equal(32))
 
 		r := newReader(b)
 		Expect(r.Next()).To(BeTrue())
@@ -27,7 +28,7 @@ var _ = Describe("writer/reader", func() {
 		Expect(r.Next()).To(BeTrue())
 		Expect(r.Text()).To(Equal("baz"))
 		Expect(r.Next()).To(BeTrue())
-		Expect(r.Text()).To(Equal("dau"))
+		Expect(r.Text()).To(Equal("boo"))
 		Expect(r.Next()).To(BeFalse())
 
 		Expect(r.Err()).NotTo(HaveOccurred())

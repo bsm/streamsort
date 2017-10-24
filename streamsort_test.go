@@ -24,6 +24,7 @@ var _ = Describe("Sorter", func() {
 		subject = New(&Options{
 			MaxMemBuffer: 1024 * 1024,
 			TempDir:      workDir,
+			Compression:  CompressionGzip,
 		})
 	})
 
@@ -56,10 +57,6 @@ var _ = Describe("Sorter", func() {
 	})
 
 	It("should append/sort large data sets", func() {
-		if testing.Short() {
-			return
-		}
-
 		rnd := rand.New(rand.NewSource(33))
 		b64 := base64.NewEncoding("0123456789@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~").WithPadding(base64.NoPadding)
 		buf := make([]byte, 100)

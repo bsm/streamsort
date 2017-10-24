@@ -1,6 +1,8 @@
 package streamsort
 
 import (
+	"compress/gzip"
+	"io"
 	"io/ioutil"
 	"os"
 )
@@ -44,7 +46,39 @@ func (s *Sorter) Sort() (*Iterator, error) {
 			return nil, err
 		}
 	}
-	return newIterator(s.files, s.opt.Comparer)
+
+	iter := &Iterator{
+		files:   make([]*os.File, 0, len(s.files)),
+		readers: make([]*reader, 0, len(s.files)),
+		items:   make(sortedSlice, 0, len(s.files)),
+
+		comparer:    s.opt.Comparer,
+		compression: s.opt.Compression,
+	}
+
+	for _, fname := range s.files {
+		f, err := os.Open(fname)
+		if err != nil {
+			_ = iter.Close()
+			return nil, err
+		}
+
+		r, o, err := iter.addFile(f)
+		if err != nil {
+			_ = iter.Close()
+			return nil, err
+		}
+
+		if r.Next() {
+			iter.append(o, r.Bytes())
+		}
+		if err := r.Err(); err != nil {
+			_ = iter.Close()
+			return nil, err
+		}
+	}
+
+	return iter, nil
 }
 
 // Close stops the processing and removes all temporary files
@@ -68,12 +102,33 @@ func (s *Sorter) flush() error {
 	}
 	defer f.Close()
 
+	var (
+		w io.Writer
+		z *gzip.Writer
+	)
+
+	switch s.opt.Compression {
+	case CompressionGzip:
+		z = gzip.NewWriter(f)
+		defer z.Close()
+
+		w = z
+	default:
+		w = f
+	}
+
 	s.buf.Sort(s.opt.Comparer)
 	s.files = append(s.files, f.Name())
-	s.wrt.Reset(f)
+	s.wrt.Reset(w)
 
-	for _, data := range s.buf.s {
-		if err := s.wrt.Append(data); err != nil {
+	for _, b := range s.buf.s {
+		if err := s.wrt.Append(b); err != nil {
+			return err
+		}
+	}
+
+	if z != nil {
+		if err := z.Flush(); err != nil {
 			return err
 		}
 	}

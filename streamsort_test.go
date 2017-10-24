@@ -2,14 +2,18 @@ package streamsort
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega/types"
 )
 
 var _ = Describe("Sorter", func() {
@@ -25,12 +29,14 @@ var _ = Describe("Sorter", func() {
 			MaxMemBuffer: 1024 * 1024,
 			TempDir:      workDir,
 			Compression:  CompressionGzip,
+			MaxOpenFiles: 4,
 		})
 	})
 
 	AfterEach(func() {
 		Expect(subject.Close()).To(Succeed())
 		Expect(filepath.Glob(workDir + "/*")).To(BeEmpty())
+		Expect(os.RemoveAll(workDir)).To(Succeed())
 	})
 
 	It("should append/sort data", func() {
@@ -39,7 +45,7 @@ var _ = Describe("Sorter", func() {
 		Expect(subject.Append([]byte("baz"))).To(Succeed())
 		Expect(subject.Append([]byte("dau"))).To(Succeed())
 
-		it, err := subject.Sort()
+		it, err := subject.Sort(context.Background())
 		Expect(err).NotTo(HaveOccurred())
 		defer it.Close()
 
@@ -62,7 +68,7 @@ var _ = Describe("Sorter", func() {
 		buf := make([]byte, 100)
 		val := make([]byte, b64.EncodedLen(len(buf)))
 
-		for i := 0; i < 1e5; i++ {
+		for i := 0; i < 2*1e5; i++ {
 			buf = buf[:50+rnd.Intn(50)]
 			val = val[:b64.EncodedLen(len(buf))]
 
@@ -72,16 +78,16 @@ var _ = Describe("Sorter", func() {
 			b64.Encode(val, buf)
 			Expect(subject.Append(val)).To(Succeed())
 		}
-		Expect(subject.files).To(HaveLen(9))
+		Expect(subject.fnames).To(HaveLen(18))
 
-		it, err := subject.Sort()
+		it, err := subject.Sort(context.Background())
 		Expect(err).NotTo(HaveOccurred())
 		defer it.Close()
-		Expect(subject.files).To(HaveLen(10))
+		Expect(subject.fnames).To(HaveLen(3))
 
 		var prev []byte
 		for it.Next() {
-			Expect(bytes.Compare(prev, it.Bytes())).To(BeNumerically("<", 0), "expected %q to be >= than %q", it.Bytes(), prev)
+			Expect(prev).To(bytesCompareWith(-1, it.Bytes()))
 			prev = append(prev[:0], it.Bytes()...)
 		}
 		Expect(it.Err()).NotTo(HaveOccurred())
@@ -89,7 +95,34 @@ var _ = Describe("Sorter", func() {
 
 })
 
+// --------------------------------------------------------------------
+
 func TestSuite(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "streamsort")
+}
+
+func bytesCompareWith(v int, b []byte) types.GomegaMatcher {
+	return &bytesCompareWithMatcher{b: b, v: v}
+}
+
+type bytesCompareWithMatcher struct {
+	b []byte
+	v int
+}
+
+func (m *bytesCompareWithMatcher) Match(actual interface{}) (bool, error) {
+	a, ok := actual.([]byte)
+	if !ok {
+		return false, fmt.Errorf("bytesCompareWith matcher expects []byte")
+	}
+	return bytes.Compare(a, m.b) == m.v, nil
+}
+
+func (m *bytesCompareWithMatcher) FailureMessage(a interface{}) string {
+	return fmt.Sprintf("Expected\n\tbytes.Compare(%q, %q)\nto return\n\t%#v", a, m.b, m.v)
+}
+
+func (m *bytesCompareWithMatcher) NegatedFailureMessage(a interface{}) string {
+	return fmt.Sprintf("Expected\n\tbytes.Compare(%q, %q)\nnot to return\n\t%#v", a, m.b, m.v)
 }

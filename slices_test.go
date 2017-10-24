@@ -47,10 +47,10 @@ var _ = Describe("sortedSlice", func() {
 		s = s.Insert(4, []byte("dau"), c)
 
 		Expect(s).To(Equal(sortedSlice{
-			{orig: 1, data: []byte("foo")},
-			{orig: 4, data: []byte("dau")},
-			{orig: 3, data: []byte("baz")},
-			{orig: 2, data: []byte("bar")},
+			{srcID: 1, data: []byte("foo")},
+			{srcID: 4, data: []byte("dau")},
+			{srcID: 3, data: []byte("baz")},
+			{srcID: 2, data: []byte("bar")},
 		}))
 	})
 

@@ -28,7 +28,7 @@ func main() {
 	sorter.Append([]byte("boo"))
 
 	// Sort and iterate
-	iter, err := sorter.Sort()
+	iter, err := sorter.Sort(context.Background())
 	if err != nil {
 		panic(err)
 	}

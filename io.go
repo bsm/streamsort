@@ -2,10 +2,13 @@ package streamsort
 
 import (
 	"bufio"
+	"compress/gzip"
 	"encoding/binary"
 	"errors"
 	"hash/crc32"
 	"io"
+	"io/ioutil"
+	"os"
 )
 
 var errCRCMismatch = errors.New("streamsort: bad data stream")
@@ -81,9 +84,56 @@ func (r *reader) Err() error {
 
 // --------------------------------------------------------------------
 
+type fileReader struct {
+	*reader
+	f *os.File
+	z *gzip.Reader
+}
+
+func openFile(name string, comp Compression) (*fileReader, error) {
+	f, err := os.Open(name)
+	if err != nil {
+		return nil, err
+	}
+
+	fr := fileReader{f: f}
+	switch comp {
+	case CompressionGzip:
+		z, err := gzip.NewReader(f)
+		if err != nil {
+			_ = f.Close()
+			return nil, err
+		}
+		fr.z = z
+		fr.reader = newReader(z)
+	default:
+		fr.reader = newReader(f)
+	}
+	return &fr, nil
+}
+
+// Close closes the reader
+func (r *fileReader) Close() (err error) {
+	if r.z != nil {
+		if e := r.z.Close(); e != nil {
+			err = e
+		}
+	}
+	if e := r.f.Close(); e != nil {
+		err = e
+	}
+	return
+}
+
+// --------------------------------------------------------------------
+
 type writer struct {
 	out io.Writer
 	tmp [binary.MaxVarintLen64]byte
+}
+
+func newWriter(out io.Writer) *writer {
+	return &writer{out: out}
 }
 
 // Append appends data to the writer
@@ -104,3 +154,52 @@ func (w *writer) Append(data []byte) error {
 
 // Reset resets the writer
 func (w *writer) Reset(out io.Writer) { w.out = out }
+
+// --------------------------------------------------------------------
+
+type fileWriter struct {
+	*writer
+	f *os.File
+	z *gzip.Writer
+}
+
+func createFile(dir string, comp Compression) (*fileWriter, error) {
+	f, err := ioutil.TempFile(dir, "streamsort.")
+	if err != nil {
+		return nil, err
+	}
+
+	fw := fileWriter{f: f}
+	switch comp {
+	case CompressionGzip:
+		fw.z = gzip.NewWriter(f)
+		fw.writer = newWriter(fw.z)
+	default:
+		fw.writer = newWriter(fw.f)
+	}
+	return &fw, nil
+}
+
+// Name returns the file name
+func (w *fileWriter) Name() string { return w.f.Name() }
+
+// Flush flushes the remaining buffer
+func (w *fileWriter) Flush() error {
+	if w.z != nil {
+		return w.z.Flush()
+	}
+	return nil
+}
+
+// Close closes the writer
+func (w *fileWriter) Close() (err error) {
+	if w.z != nil {
+		if e := w.z.Close(); e != nil {
+			err = e
+		}
+	}
+	if e := w.f.Close(); e != nil {
+		err = e
+	}
+	return
+}

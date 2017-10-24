@@ -19,6 +19,10 @@ type Options struct {
 	// Default: CompressionNone
 	Compression Compression
 
+	// MaxOpenFiles limits the number of open files; must be >1.
+	// Default: 100
+	MaxOpenFiles int
+
 	// MaxMemBuffer limits the memory used for sorting
 	// Default: 64M (must be at least 1M = 1024*1024)
 	MaxMemBuffer int
@@ -33,6 +37,10 @@ func (o *Options) norm() {
 
 	if o.Compression < CompressionNone || o.Compression >= nCompression {
 		o.Compression = CompressionNone
+	}
+
+	if o.MaxOpenFiles < 2 {
+		o.MaxOpenFiles = 100
 	}
 
 	if o.MaxMemBuffer < 1 {

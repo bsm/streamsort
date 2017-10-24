@@ -2,6 +2,7 @@ package streamsort_test
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -21,7 +22,7 @@ func Example() {
 	sorter.Append([]byte("boo"))
 
 	// Sort and iterate
-	iter, err := sorter.Sort()
+	iter, err := sorter.Sort(context.Background())
 	if err != nil {
 		panic(err)
 	}
@@ -94,7 +95,7 @@ func Example_JSON() {
 	}
 
 	// Sort intput, retrieve iterator
-	iter, err := sorter.Sort()
+	iter, err := sorter.Sort(context.Background())
 	if err != nil {
 		panic(err)
 	}

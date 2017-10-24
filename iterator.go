@@ -1,50 +1,55 @@
 package streamsort
 
 import (
-	"compress/gzip"
 	"errors"
-	"os"
 )
 
 var errClosed = errors.New("streamsort: iterator is closed")
 
 // Iterator allows to iterate over sorted outputs
 type Iterator struct {
-	files   []*os.File
-	zwraps  []*gzip.Reader
-	readers []*reader
-	items   sortedSlice
-
-	comparer    Comparer
-	compression Compression
+	sources  []*fileReader
+	stash    sortedSlice
+	comparer Comparer
 
 	cur []byte
 	err error
 }
 
-func (i *Iterator) append(orig int, data []byte) {
-	i.items = i.items.Insert(orig, data, i.comparer)
+func newIterator(fnames []string, comparer Comparer, compression Compression) (*Iterator, error) {
+	i := &Iterator{
+		sources:  make([]*fileReader, 0, len(fnames)),
+		comparer: comparer,
+	}
+	for _, fname := range fnames {
+		src, srcID, err := i.openFile(fname, compression)
+		if err != nil {
+			_ = i.Close()
+			return nil, err
+		}
+		if src.Next() {
+			i.insert(srcID, src.Bytes())
+		}
+		if err := src.Err(); err != nil {
+			_ = i.Close()
+			return nil, err
+		}
+	}
+	return i, nil
 }
 
-func (i *Iterator) addFile(f *os.File) (*reader, int, error) {
-	o := len(i.readers)
-	i.files = append(i.files, f)
+func (i *Iterator) insert(srcID int, data []byte) {
+	i.stash = i.stash.Insert(srcID, data, i.comparer)
+}
 
-	var r *reader
-	switch i.compression {
-	case CompressionGzip:
-		z, err := gzip.NewReader(f)
-		if err != nil {
-			return nil, 0, err
-		}
-		i.zwraps = append(i.zwraps, z)
-		r = newReader(z)
-	default:
-		r = newReader(f)
+func (i *Iterator) openFile(fname string, comp Compression) (*fileReader, int, error) {
+	srcID := len(i.sources)
+	src, err := openFile(fname, comp)
+	if err != nil {
+		return nil, 0, err
 	}
-	i.readers = append(i.readers, r)
-
-	return r, o, nil
+	i.sources = append(i.sources, src)
+	return src, srcID, nil
 }
 
 // Next advances the cursor to the next entry
@@ -53,18 +58,18 @@ func (i *Iterator) Next() bool {
 		return false
 	}
 
-	pos := len(i.items) - 1
-	if pos < 0 {
+	last := len(i.stash) - 1
+	if last < 0 {
 		return false
 	}
 
-	item := i.items[pos]
-	i.items = i.items[:pos]
+	item := i.stash[last]
+	i.stash = i.stash[:last]
 	i.cur = append(i.cur[:0], item.data...)
 
-	src := i.readers[item.orig]
+	src := i.sources[item.srcID]
 	if src.Next() {
-		i.items = i.items.Insert(item.orig, src.Bytes(), i.comparer)
+		i.insert(item.srcID, src.Bytes())
 	}
 	if err := src.Err(); err != nil {
 		i.err = err
@@ -88,14 +93,13 @@ func (i *Iterator) Err() error { return i.err }
 func (i *Iterator) Close() error {
 	var err error
 
-	for _, f := range i.files {
-		if e := f.Close(); e != nil {
+	for _, src := range i.sources {
+		if e := src.Close(); e != nil {
 			err = e
 		}
 	}
 
-	i.files = i.files[:0]
-	i.readers = i.readers[:0]
+	i.sources = i.sources[:0]
 	i.err = errClosed
 
 	return err

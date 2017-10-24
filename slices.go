@@ -41,15 +41,15 @@ func (b *bufferSlice) Sort(c Comparer) {
 // --------------------------------------------------------------------
 
 type sortedItem struct {
-	orig int
-	data []byte
+	srcID int
+	data  []byte
 }
 
 type sortedSlice []sortedItem
 
 // Insert adds an item to the slice
-func (s sortedSlice) Insert(orig int, data []byte, c Comparer) sortedSlice {
-	item := sortedItem{orig: orig, data: data}
+func (s sortedSlice) Insert(srcID int, data []byte, c Comparer) sortedSlice {
+	item := sortedItem{srcID: srcID, data: data}
 
 	if pos := sort.Search(len(s), func(i int) bool { return c.Compare(s[i].data, item.data) < 0 }); pos < len(s) {
 		s = append(s, sortedItem{})

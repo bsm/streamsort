@@ -116,20 +116,21 @@ func (s *Sorter) merge(ctx context.Context, names []string) (string, error) {
 
 	for it.Next() {
 		if err := ctx.Err(); err != nil {
-			_ = fw.Close()
 			_ = unlinkAll(fw.Name())
 			return "", err
 		}
 
 		if err := fw.Append(it.Bytes()); err != nil {
-			_ = fw.Close()
 			_ = unlinkAll(fw.Name())
 			return "", err
 		}
 	}
 
 	if err := fw.Flush(); err != nil {
-		_ = fw.Close()
+		_ = unlinkAll(fw.Name())
+		return "", err
+	}
+	if err := fw.Close(); err != nil {
 		_ = unlinkAll(fw.Name())
 		return "", err
 	}
@@ -153,6 +154,9 @@ func (s *Sorter) flush() error {
 	}
 
 	if err := fw.Flush(); err != nil {
+		return err
+	}
+	if err := fw.Close(); err != nil {
 		return err
 	}
 

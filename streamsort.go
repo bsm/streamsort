@@ -3,9 +3,6 @@ package streamsort
 import (
 	"context"
 	"os"
-	"sync"
-
-	"golang.org/x/sync/errgroup"
 )
 
 // Sorter is responsible for sorting a stream
@@ -13,7 +10,7 @@ type Sorter struct {
 	opt Options
 	buf bufferSlice
 
-	fnames []string
+	fnames fileNames
 }
 
 // New inits a sorter
@@ -59,41 +56,30 @@ func (s *Sorter) Sort(ctx context.Context) (*Iterator, error) {
 
 // Close stops the processing and removes all temporary fnames
 func (s *Sorter) Close() error {
-	err := unlinkAll(s.fnames...)
+	err := s.fnames.RemoveAll()
 	s.fnames = s.fnames[:0]
 	return err
 }
 
 func (s *Sorter) compact(ctx context.Context, perGroup int) error {
-	var mu sync.Mutex
-	result := make([]string, 0, len(s.fnames)/perGroup+1)
-
-	errs, ctx := errgroup.WithContext(ctx)
+	result := make(fileNames, 0, len(s.fnames)/perGroup+1)
 	for x := 0; x < len(s.fnames); x += perGroup {
 		group := s.fnames[x:]
 		if len(group) > perGroup {
 			group = group[:perGroup]
 		}
 
-		errs.Go(func() error {
-			fname, err := s.merge(ctx, group)
-			if err != nil {
-				return err
-			}
+		fname, err := s.merge(ctx, group)
+		if err != nil {
+			_ = result.RemoveAll()
+			return err
+		}
 
-			mu.Lock()
-			result = append(result, fname)
-			mu.Unlock()
-			return nil
-		})
-	}
-	if err := errs.Wait(); err != nil {
-		_ = unlinkAll(result...)
-		return err
+		result = append(result, fname)
 	}
 
-	if err := unlinkAll(s.fnames...); err != nil {
-		_ = unlinkAll(result...)
+	if err := s.fnames.RemoveAll(); err != nil {
+		_ = result.RemoveAll()
 		return err
 	}
 
@@ -116,22 +102,22 @@ func (s *Sorter) merge(ctx context.Context, names []string) (string, error) {
 
 	for it.Next() {
 		if err := ctx.Err(); err != nil {
-			_ = unlinkAll(fw.Name())
+			_ = os.Remove(fw.Name())
 			return "", err
 		}
 
 		if err := fw.Append(it.Bytes()); err != nil {
-			_ = unlinkAll(fw.Name())
+			_ = os.Remove(fw.Name())
 			return "", err
 		}
 	}
 
 	if err := fw.Flush(); err != nil {
-		_ = unlinkAll(fw.Name())
+		_ = os.Remove(fw.Name())
 		return "", err
 	}
 	if err := fw.Close(); err != nil {
-		_ = unlinkAll(fw.Name())
+		_ = os.Remove(fw.Name())
 		return "", err
 	}
 	return fw.Name(), nil
@@ -164,9 +150,13 @@ func (s *Sorter) flush() error {
 	return nil
 }
 
-func unlinkAll(names ...string) (err error) {
-	for _, fn := range names {
-		if e := os.Remove(fn); e != nil {
+// --------------------------------------------------------------------
+
+type fileNames []string
+
+func (fns fileNames) RemoveAll() (err error) {
+	for _, fn := range fns {
+		if e := os.Remove(fn); e != nil && !os.IsNotExist(e) {
 			err = e
 		}
 	}

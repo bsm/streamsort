@@ -16,10 +16,10 @@ func Example() {
 	defer sorter.Close()
 
 	// Append data
-	sorter.Append([]byte("foo"))
-	sorter.Append([]byte("bar"))
-	sorter.Append([]byte("baz"))
-	sorter.Append([]byte("boo"))
+	_ = sorter.Append([]byte("foo"))
+	_ = sorter.Append([]byte("bar"))
+	_ = sorter.Append([]byte("baz"))
+	_ = sorter.Append([]byte("boo"))
 
 	// Sort and iterate
 	iter, err := sorter.Sort(context.Background())
@@ -42,7 +42,7 @@ func Example() {
 	// foo
 }
 
-func Example_JSON() {
+func Example_json() {
 	// Define a custom comparer.
 	// Sort by year ascending, then by price descending
 	comparer := streamsort.ComparerFunc(func(b1, b2 []byte) int {

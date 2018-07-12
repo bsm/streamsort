@@ -24,11 +24,9 @@ type Options struct {
 	MaxOpenFiles int
 
 	// MaxMemBuffer limits the memory used for sorting
-	// Default: 64M (must be at least 1M = 1024*1024)
+	// Default: 64M (must be at least 16k)
 	MaxMemBuffer int
 }
-
-const oneMB = 1024 * 1024
 
 func (o *Options) norm() {
 	if o.Comparer == nil {
@@ -44,9 +42,9 @@ func (o *Options) norm() {
 	}
 
 	if o.MaxMemBuffer < 1 {
-		o.MaxMemBuffer = 64 * oneMB
-	} else if o.MaxMemBuffer < oneMB {
-		o.MaxMemBuffer = oneMB
+		o.MaxMemBuffer = (1 << 26)
+	} else if o.MaxMemBuffer < (1 << 14) {
+		o.MaxMemBuffer = (1 << 14)
 	}
 }
 

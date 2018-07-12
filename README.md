@@ -22,10 +22,10 @@ func main() {
 	defer sorter.Close()
 
 	// Append data
-	sorter.Append([]byte("foo"))
-	sorter.Append([]byte("bar"))
-	sorter.Append([]byte("baz"))
-	sorter.Append([]byte("boo"))
+	_ = sorter.Append([]byte("foo"))
+	_ = sorter.Append([]byte("bar"))
+	_ = sorter.Append([]byte("baz"))
+	_ = sorter.Append([]byte("boo"))
 
 	// Sort and iterate
 	iter, err := sorter.Sort(context.Background())

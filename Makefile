@@ -6,8 +6,14 @@ vet:
 test:
 	go test ./...
 
+test-race:
+	go test ./... -race
+
 bench:
-	go test ./... -bench=. -benchmem -benchtime=30s
+	go test ./... -run=NONE -bench=. -benchmem -benchtime=30s
+
+bench-race:
+	go test ./... -run=NONE -bench=. -race
 
 errcheck:
 	errcheck ./...
